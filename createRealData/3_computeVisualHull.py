@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import argparse
 # code for reconstruct visual hull mesh
 from scipy.io import loadmat
+import open3d as o3d
+
 
 def quaternionToRotation(Q):
     # q = a + bi + cj + dk
@@ -47,19 +49,24 @@ parser.add_argument('--zmin', type=float, default=-1.7)
 parser.add_argument('--zmax', type=float, default=1.7)
 
 parser.add_argument('--output_dir', type=str, default='./visualhull_output')
-parser.add_argument('--point_n',   type=int, default=10000)
+parser.add_argument('--save_intermediate',   type=bool, default=False)
+parser.add_argument('--point_num',   type=int, default=10000)
 
 opt = parser.parse_args()
 
 numMask = (opt.img_idx_end - opt.img_idx_start) // opt.img_idx_step + 1
 setname, scenename = opt.data_src.split('/')[-2], opt.data_src.split('/')[-1]
-meshName = f'{setname}_{scenename}_{opt.img_idx_start}_{opt.img_idx_end}_{opt.img_idx_step}__visualhull.obj'
+if opt.mask_suffix == 'label.png': # gt
+    mask_savelabel = 'gt'
+else:
+    mask_savelabel = 'pred'
+meshName = f'{opt.output_dir}/{setname}_{scenename}_{opt.img_idx_start}_{opt.img_idx_end}_{opt.img_idx_step}_{mask_savelabel}_visualhull.obj'
 pointcloudName = meshName.replace('.obj', '.ply')
 
 os.system(f'mkdir -p {opt.output_dir}')
 
-buildVisualHull = False
-plot3Dcam = True
+buildVisualHull = True
+plot3Dcam = False
 
 metadata = loadmat(f'{opt.data_src}/{opt.meta_file}')
 cam_intr = metadata['000000']['intrinsic_matrix'][0][0]
@@ -71,7 +78,8 @@ camDict = {}
 for i in range(opt.img_idx_start, opt.img_idx_end+1, opt.img_idx_step):
     paramDict = {}
     rt = metadata[f'{i:06d}']['rotation_translation_matrix'][0][0]
-    R, T = rt[:, :3].T, rt[:, 3]
+    R, T = rt[:, :3], rt[:, 3]
+    R, T = R.T, -R.T @ T
     paramDict['Rot'] = R
     paramDict['Trans'] = T
     paramDict['Origin'] = -R.T @ T
@@ -80,32 +88,6 @@ for i in range(opt.img_idx_start, opt.img_idx_end+1, opt.img_idx_step):
     paramDict['cId'] = i
     paramDict['imgName'] = f'{i:06d}'
     camDict[i] = paramDict
-# Read images file
-# c = 0
-# camDict = {}
-# with open(imgFile, 'r') as camPoses:
-#     for cam in camPoses.readlines():
-#         c += 1
-#         if c <= 3: # skip comments
-#             continue
-#         elif c == 4:
-#             numImg = int(cam.strip().split(',')[0].split(':')[1])
-#             print('Number of images:', numImg)
-#         else:
-#             if c % 2 == 1:
-#                 line = cam.strip().split(' ')
-#                 R = quaternionToRotation(line[1:5])
-#                 paramDict = {}
-#                 paramDict['Rot'] = R
-#                 paramDict['Trans'] = np.array([float(line[5]), float(line[6]), float(line[7])])
-#                 paramDict['Origin'] = -np.matmul(np.transpose(R), paramDict['Trans'])
-#                 paramDict['Target'] = R[2, :] + paramDict['Origin']
-#                 paramDict['Up'] = -R[1, :]
-#                 paramDict['cId'] = int(line[0])
-#                 name = line[9]
-#                 paramDict['imgName'] = name
-#                 nameId = name.split('_')[2].split('.')[0]
-#                 camDict[nameId] = paramDict
 
 # initialize visual hull voxels
 resolution = opt.resolution
@@ -135,39 +117,10 @@ if plot3Dcam == True:
     ups = []
     ids = []
 
-# if writeOutputCamFile == True:
-#     if os.path.exists(outputCamFile) == True:
-#         print("{} exists!!! Insert y if want to overwrite:".format(outputCamFile))
-#         overwrite = input()
-#         if overwrite == 'y':
-#             os.remove(outputCamFile)
-#         else:
-#             assert False, "{} exists!!!".format(outputCamFile)
-
-#     with open(outputCamFile, 'w') as cam:
-#         cam.write('{}\n'.format(numMask))
 
 for i in range(opt.img_idx_start, opt.img_idx_end+1, opt.img_idx_step):
     print('Processing mask idx:'.format(i))
-    #print(os.path.join(maskFolder, maskFiles[i]))
-    #seg = cv2.imread(os.path.join(maskFolder, maskFiles[i]), cv2.IMREAD_UNCHANGED)[:,:,3]
-    # seg = cv2.imread(maskFiles[i], cv2.IMREAD_UNCHANGED)[:,:,3]
-    # baseName = os.path.basename(maskFiles[i])
-    # if saveBinaryMask == True:
-        # print(os.path.join(outputMaskFolder, baseName))
-        # segResize = cv2.resize(seg, (resizeRGBimW, resizeRGBimH), interpolation=cv2.INTER_LINEAR)
-        # cv2.imwrite(os.path.join(outputMaskFolder, 'seg_{}.png'.format(i+1)), segResize)
-    # mask = seg.reshape(imgH * imgW)
-
-    # imgId = baseName.split('_')[2].split('.')[0]
-
-    # if saveRGB == True:
-    #     rgbName = os.path.join(sourceRGBFolder, baseName).replace('png', 'jpg')
-    #     assert os.path.exists(rgbName), 'RGB image {} does not exist!'.format(rgbName)
-    #     rgbImg = cv2.imread(rgbName)
-    #     rgbImg = cv2.resize(rgbImg, (resizeRGBimW, resizeRGBimH), interpolation=cv2.INTER_LINEAR)
-    #     cv2.imwrite(os.path.join(outputRGBFolder, 'im_{}.png'.format(i+1)), rgbImg)
-    mask = cv2.imread(f'{opt.data_src}/{i:06d}-label.png', -1).reshape(imgH * imgW)
+    mask = cv2.imread(f'{opt.data_src}/{i:06d}-{opt.mask_suffix}', -1).reshape(imgH * imgW)
     mask[mask != 0] = 255
     imgId = i
 
@@ -185,19 +138,11 @@ for i in range(opt.img_idx_start, opt.img_idx_end+1, opt.img_idx_step):
     target = camDict[imgId]['Target']
     up = camDict[imgId]['Up']
 
-    #print('Origin:',origin, ' Target:', target, ' Up:', up)
-
     if plot3Dcam == True:
         centers.append(origin)
         lookups.append((target-origin))
         ups.append(up)
         ids.append(imgId)
-
-    # if writeOutputCamFile == True:
-    #     with open(outputCamFile, 'a') as cam:
-    #         cam.write('{} {} {}\n'.format(origin[0], origin[1], origin[2]))
-    #         cam.write('{} {} {}\n'.format(target[0], target[1], target[2]))
-    #         cam.write('{} {} {}\n'.format(up[0], up[1], up[2]))
 
     if buildVisualHull == True:
 
@@ -240,14 +185,25 @@ for i in range(opt.img_idx_start, opt.img_idx_end+1, opt.img_idx_step):
         print('Normals Num: %d' % normals.shape[0])
         print('Faces Num: %d' % faces.shape[0])
 
+        if opt.save_intermediate:
+            axisLen = float(resolution-1) / 2.0
+            verts = (verts - axisLen) / axisLen * 1.7
+            mesh = trm.Trimesh(vertices = verts, vertex_normals = normals, faces = faces)
+            points = trm.sample.sample_surface(mesh, opt.point_num)[0]
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points)
+            mesh.export(meshName.replace('.obj', f'{i}.obj'))
+            o3d.io.write_point_cloud(pointcloudName.replace('.ply', f'{i}.ply'), pcd)
+
 if buildVisualHull:
     axisLen = float(resolution-1) / 2.0
     verts = (verts - axisLen) / axisLen * 1.7
     mesh = trm.Trimesh(vertices = verts, vertex_normals = normals, faces = faces)
-    pointcloud = trm.sample.sample_surface(mesh, opt.point_num)
-    print('Export final mesh !')
+    points = trm.sample.sample_surface(mesh, opt.point_num)[0]
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
     mesh.export(meshName)
-    pointcloud.export(pointcloudName)
+    o3d.io.write_point_cloud(pointcloudName, pcd)
 
 if plot3Dcam == True:
     #code for visualize lookup and up vectors
