@@ -15,14 +15,20 @@ import math
 import cv2
 import torch.nn.functional as F
 import os.path as osp
+import h5py
 
 import time
 
 parser = argparse.ArgumentParser()
 # The locationi of training set
-parser.add_argument('--dataRoot', default='../../createRealData/ImagesReal/real/', help='path to images' )
-parser.add_argument('--shapeRoot', default='../../createRealData/Shapes/real/', help='path to images' )
-parser.add_argument('--experiment', default='../Model/Normal/check%d_normal_nw1.00_volume_sp1_an4_weigtedSum', help='the path to store samples and models' )
+# parser.add_argument('--dataRoot', default='../../RealData_tmp/ImagesReal/real/', help='path to images' )
+# parser.add_argument('--shapeRoot', default='../../RealData_tmp/Shapes/real/', help='path to images' )
+# parser.add_argument('--dataRoot', default='../../RealData/ImagesReal/real/', help='path to images' )
+# parser.add_argument('--shapeRoot', default='../../RealData/Shapes/real/', help='path to images' )
+# parser.add_argument('--experiment', default='../../Model/check%d_normal_nw1.00_volume_sp1_an4_weigtedSum', help='the path to store samples and models' )
+parser.add_argument('--dataRoot', default='./RealData_tmp/ImagesReal/real/', help='path to images' )
+parser.add_argument('--shapeRoot', default='./RealData_tmp/Shapes/real/', help='path to images' )
+parser.add_argument('--experiment', default='./Model/check%d_normal_nw1.00_volume_sp1_an4_weigtedSum', help='the path to store samples and models' )
 parser.add_argument('--testRoot', default=None, help='the path to store outputs')
 # The basic training setting
 parser.add_argument('--nepoch', type=int, default=10, help='the number of epochs for training' )
@@ -601,6 +607,25 @@ for i, dataBatch in enumerate(brdfLoader):
         for n in range(0, len(renderedImgs ) ):
             vutils.save_image( (torch.clamp(renderedImgs[n], 0, 1)*maskPreds[n] .expand_as(imBatch) ) .data,
                     '{0}/{1}_renederedImg_{2}.png'.format(opt.testRoot, path, n), nrow=5 )
+            
+        
+        for n in range(0, batchSize ):
+            normal1 = normal1Preds[1][n, :].cpu().data.numpy().transpose([1, 2, 0] ) # change index 2 to 1
+            normal2 = normal2Preds[1][n, :].cpu().data.numpy().transpose([1, 2, 0] )
+            normal1 = normal1 * seg1Batch[n, :].cpu().data.numpy().transpose([1, 2, 0] )
+            normal2 = normal2 * seg1Batch[n, :].cpu().data.numpy().transpose([1, 2, 0] )
+            twoNormals = np.concatenate([normal1, normal2], axis=2 )
+
+
+            if False:
+                name = nameBatch[n][0].replace('im_', 'imtwoNormalPred%d_' % opt.camNum ).replace('.rgbe', '.h5')
+                hf = h5py.File(name, 'w')
+                hf.create_dataset('data', data = twoNormals, compression='lzf')
+                hf.close()
+            else:
+                name = nameBatch[n][0].replace('im_', 'imtwoNormalPred%d_' % opt.camNum ).replace('.png', '.npy')
+                np.save(name, twoNormals )
+            print('Save normal %s' % name )
         '''
         for n in range(0, len(renderedImgs ) ):
             vutils.save_image( (torch.clamp(renderedImgs[n], 0, 1)**(1.0/2.2) *seg2Batch.expand_as(imBatch) ) .data,
