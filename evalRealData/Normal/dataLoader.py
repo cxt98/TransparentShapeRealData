@@ -105,7 +105,7 @@ class BatchLoader(Dataset):
                 shape = osp.join(shapeRoot, 'Shape__%d' % n )
                 if not osp.isdir(shape ):
                     continue
-                xmlFile = osp.join(shape, 'im.xml')
+                xmlFile = osp.join(shape, f'imVH_{viewNum}.xml')
                 # Create rendering file for Depth maps
                 tree = et.parse(xmlFile )
                 root = tree.getroot()
@@ -132,11 +132,11 @@ class BatchLoader(Dataset):
         self.imList = []
         self.shapeNameList = []
         self.camNumSingleList = []
-        for n in range(max(0, shapeRs ), min(len(shapeList ), shapeRe ) ):
+        for n in range(shapeRs, shapeRe):
             shape = osp.join(dataRoot, 'Shape__%d' % n )
             if not osp.isdir(shape ):
                 continue
-            camNum = self.camNumList[n]
+            camNum = self.camNumList[n - shapeRs]
             #imNames = sorted(glob.glob(osp.join(shape, 'im_*.rgbe' ) ) )
             imNames = sorted(glob.glob(osp.join(shape, 'im_*.png' ) ) )
             #random.shuffle(imNames )
@@ -325,6 +325,14 @@ class BatchLoader(Dataset):
                     hf.close()
                 else:
                     twoBounceVH = np.load(twoBounceVHName )
+                
+                h, w, n = twoBounceVH.shape
+                twoBounceVH_tmp = np.zeros((h, w, n + 2,))
+                twoBounceVH_tmp[:, :, :6] = twoBounceVH[:, :, :6]
+                twoBounceVH_tmp[:, :, 7:13] = twoBounceVH[:, :, 6:]
+                twoBounceVH_tmp[:, :, 6] = cv2.resize(cv2.imread(imName.replace('im_', 'seg_'), -1), (w, h))
+                twoBounceVH_tmp[:, :, 13] = cv2.resize(cv2.imread(imName.replace('im_', 'seg_'), -1), (w, h))
+                twoBounceVH = twoBounceVH_tmp
 
                 if twoBounceVH.shape[0] != self.imWidth or twoBounceVH.shape[1] != self.imHeight:
                     newTwoBounce1 = cv2.resize(twoBounceVH[:, :, 0:3], (self.imWidth, self.imHeight ), interpolation=cv2.INTER_AREA )

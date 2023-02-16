@@ -19,6 +19,25 @@ import h5py
 
 import time
 
+# (3-1, 3-3, 4-6, 5-6, 6-6, 7-6, 8-1, 8-2)-5 -> shape__0-7
+# (3-1, 3-3, 4-6, 5-6, 6-6, 7-6, 8-1, 8-2)-5 -> shape__8-15
+# run options for clearpose data
+# "--dataRoot",
+# "/home/cxt/trecs/through_looking_glass/TransparentShapeRealData/clearpose_merged_res",
+# "--shapeRoot",
+# "/home/cxt/trecs/through_looking_glass/TransparentShapeRealData/clearpose_merged_res",
+# "--testRoot",
+# "/home/cxt/trecs/through_looking_glass/TransparentShapeRealData/clearpose_merged_res",
+# "--experiment", "TransparentShapeReconstruction/models/Model/Normal/check%d_normal_nw1.00_volume_sp1_an4_weigtedSum",
+# "--imageHeight", "480",
+# "--imageWidth", "640",
+# "--camNum", "10", // 5 or 10
+# "--shapeStart", "8",
+# "--shapeEnd", "16", // 0-8 for 5, 8-16 for 10
+# "--isNoErrMap",
+# "--isAddCostVolume",
+# "--cuda",
+
 parser = argparse.ArgumentParser()
 # The locationi of training set
 # parser.add_argument('--dataRoot', default='../../RealData_tmp/ImagesReal/real/', help='path to images' )
@@ -113,13 +132,13 @@ opt.experiment = opt.experiment % opt.camNum
 if not osp.isdir(opt.experiment ):
     print('Warning: the model %s does not exist' % opt.experiment )
     assert(False )
-opt.testRoot = opt.experiment.replace('check', 'test').replace('Model/', '')
+opt.testRoot = opt.experiment.replace('check', 'test')
 
 ####################
 # opt.testRoot = 'temp_countTime'
 ####################
 
-os.system('mkdir {0}'.format( opt.testRoot ) )
+os.system('mkdir -p {0}'.format( opt.testRoot ) )
 os.system('cp *.py %s' % opt.testRoot )
 
 opt.seed = 0
@@ -129,7 +148,7 @@ torch.manual_seed(opt.seed )
 
 if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda" )
-colorMapFile = './colormap.mat'
+colorMapFile = './TransparentShapeRealData/evalRealData/Normal/colormap.mat'
 colormap = loadmat(colorMapFile)['cmap']
 colormap = torch.from_numpy(colormap).cuda()
 
@@ -345,10 +364,10 @@ for i, dataBatch in enumerate(brdfLoader):
 
     if opt.isNoErrMap:
         inputBatch = torch.cat([imBatch, imBgBatch, seg1Batch,
-            normal1VHBatch, normal2VHBatch, errorVH * 0, maskVH * 0], dim=1 )
+            normal1VHBatch, normal2VHBatch, errorVH * 0, maskVH * 0], dim=1 ).float()
     else:
         inputBatch = torch.cat([imBatch, imBgBatch, seg1Batch,
-            normal1VHBatch, normal2VHBatch, errorVH, maskVH], dim=1 )
+            normal1VHBatch, normal2VHBatch, errorVH, maskVH], dim=1 ).float()
     if opt.isAddCostVolume:
         costVolume = buildCostVolume.forward(imBatch,
                 originBatch, lookatBatch, upBatch,
@@ -565,7 +584,7 @@ for i, dataBatch in enumerate(brdfLoader):
     if True:
         if opt.batchSize == 1:
             path = nameBatch[0][0].replace(opt.dataRoot, '').replace('.png', '')
-            p = os.path.dirname(os.path.join(opt.testRoot, path))
+            p = os.path.dirname(opt.testRoot + path)
             if os.path.exists(p) == False:
                 os.makedirs(p)
         else:
