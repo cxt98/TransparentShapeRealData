@@ -12,7 +12,7 @@ import h5py
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', default='real')
-parser.add_argument('--renderProgram', default='/home/zhl/CVPR20/TransparentShape/Code/Data/OptixRenderer/src/bin/optixRenderer', help='path to the rendering program')
+parser.add_argument('--renderProgram', default='/home/amazon/OptixRenderer/src/build/bin/optixRenderer', help='path to the rendering program')
 parser.add_argument('--fileRoot', default='Shapes/', help='path to the file root')
 parser.add_argument('--outputRoot', default='Images', help='path to the output root')
 parser.add_argument('--forceOutput', action='store_true', help='Overwrite previous results')
@@ -32,7 +32,8 @@ fileRoot = opt.fileRoot
 outputRoot = opt.outputRoot + 'Real'
 renderProgram = opt.renderProgram
 
-shapes = glob.glob(osp.join(fileRoot, mode, 'Shape*') )
+# shapes = glob.glob(osp.join(fileRoot, mode, 'Shape*') )
+shapes = glob.glob(osp.join(fileRoot, mode, 'set*') )
 #for n in range(rs, min(re, len(shapes)) ):
 for n, root in enumerate(shapes):
     if opt.shapeId is not None:
@@ -86,10 +87,10 @@ for n, root in enumerate(shapes):
                 width = struct.unpack('i', byte )[0]
 
                 byte = f.read()
-                twoBounce = np.array(struct.unpack(
-                    str(width * height * 14) + 'f', byte ), dtype=np.float32 )
-                twoBounce = twoBounce.reshape([height, width, 14])
+                twoBounce = np.array(struct.unpack(str(width * height * 12) + 'f', byte ), dtype=np.float32 )
+                twoBounce = twoBounce.reshape([height, width, 12])
 
+                #0:3 normal1, 3:6 points1, 6:9: normal2, 9:12: points2
                 h5Name = resName.replace('.dat', '.h5')
                 with h5py.File(h5Name, 'w') as fOut:
                     fOut.create_dataset('data', data = twoBounce, compression='lzf')
